@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "fogeFoge.h"
+#include "mapa.h"
 
-struct mapa m;
-
+MAPA m;
 
 void liberaMapa() {
     for (int i = 0; i < m.linhas; i++) {
@@ -84,11 +84,11 @@ void move(char direcao) {
 
 int main() {
 
-    leMapa();
+    leMapa(&m);
 
     do {
 
-        imprimeMapa();
+        imprimeMapa(&m);
 
         char comando;
         scanf(" %c", &comando);
@@ -96,5 +96,5 @@ int main() {
 
     } while (!acabou());
 
-    liberaMapa();
+    liberaMapa(&m);
 }
