@@ -1,100 +1,155 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "time.h"
 #include "fogeFoge.h"
 #include "mapa.h"
+#include "ui.h"
 
 MAPA m;
-
-void liberaMapa() {
-    for (int i = 0; i < m.linhas; i++) {
-        free(m.matriz[i]);
-    }
-    free(m.matriz);
-}
-
-void alocaMapa() {
-    m.matriz = malloc(sizeof(char*) * m.linhas);
-    for (int i = 0; i < m.linhas; i++) {
-        m.matriz[i] = malloc(sizeof(char) * (m.colunas + 1));
-    }
-}
-
-void leMapa() {
-    FILE* f;
-    f = fopen("mapa.txt", "r");
-    if(f == 0) {
-        printf("Erro na leitura do mapa\n");
-        exit (1);
-    }
-
-    fscanf(f, "%d %d", &(m.linhas), &(m.colunas));
-
-    alocaMapa();
-
-    for(int i = 0; i <= 4; i++){
-        fscanf(f, "%s", m.matriz[i]);
-    }
-
-    fclose (f);
-}
-
-void imprimeMapa() {
-    for(int i = 0; i < m.linhas; i++) {
-        printf("%s\n", m.matriz[i]);
-    }
-}
+POSICAO heroi;
+int temPilula = 0;
 
 int acabou() {
-    return 0;
+	POSICAO pos;
+
+	int perdeu = !encontraMapa(&m, &pos, HEROI);
+	int ganhou = !encontraMapa(&m, &pos, FANTASMA);
+
+	return ganhou || perdeu;
+		
+}
+
+int ehDirecao(char direcao) {
+	return
+		direcao == ESQUERDA || 
+		direcao == CIMA ||
+		direcao == BAIXO ||
+		direcao == DIREITA;
 }
 
 void move(char direcao) {
-    int x;
-    int y;
 
-    for(int i = 0; i < m.linhas; i++) {
-        for(int j = 0; j < m.colunas; j++) {
-            if(m.matriz[i][j] == '@'){
-                x = i;
-                y = j;
-                break;
-            }
-        }
-    }
-    printf("x = %d\n", x);
-    printf("y = %d\n", y);
-    switch (direcao) {
-    case 'a':
-        m.matriz[x][y-1] = '@';
-        break;
-    case 'w':
-        m.matriz[x-1][y] = '@';
-        break;
-    case 's':
-        m.matriz[x+1][y] = '@';
-        break;
-    case 'd':
-        m.matriz[x][y+1] = '@';
-        break;
-    default:
-        break;
-    }
-    m.matriz[x][y] = '.';
+	int proximoX = heroi.x;
+	int proximoY = heroi.y;
+
+	switch(direcao) {
+		case ESQUERDA:
+			proximoY--;
+			break;
+		case CIMA:
+			proximoX--;
+			break;
+		case BAIXO:
+			proximoX++;
+			break;
+		case DIREITA:
+			proximoY++;
+			break;
+	}
+
+	if(!podeAndar(&m, HEROI, proximoX, proximoY))
+		return;
+
+	if(ehPersonagem(&m, PILULA, proximoX, proximoY)) {
+		temPilula=1;
+	}
+
+	andaNoMapa(&m, heroi.x, heroi.y, proximoX, proximoY);
+	heroi.x = proximoX;
+	heroi.y = proximoY;
+}
+
+int praOndeFantasmaVai(int xAtual, int yAtual, 
+	int* xDestino, int* yDestino) {
+
+	int opcoes[4][2] = { 
+		{ xAtual+1 , yAtual   },  
+		{ xAtual   , yAtual+1 }, 
+		{ xAtual   , yAtual-1 }, 
+		{ xAtual-1 , yAtual   }
+	};
+
+	srand(time(0));
+	for(int i = 0; i < 10; i++) {
+		int posicao = rand() % 4;
+
+		if(podeAndar(&m, FANTASMA, opcoes[posicao][0], opcoes[posicao][1])) {
+			*xDestino = opcoes[posicao][0];
+			*yDestino = opcoes[posicao][1];
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+void fantasmas() {
+	MAPA copia;
+
+	copiaMapa(&copia, &m);
+
+	for(int i = 0; i < copia.linhas; i++) {
+		for(int j = 0; j < copia.colunas; j++) {
+			if(copia.matriz[i][j] == FANTASMA) {
+
+				int xDestino;
+				int yDestino;
+
+				int encontrou = praOndeFantasmaVai(i, j, &xDestino, &yDestino);
+
+				if(encontrou) {
+					andaNoMapa(&m, i, j, xDestino, yDestino);
+				}
+			}
+		}
+	}
+
+	liberaMapa(&copia);
+}
+
+void explodePilula2(int x, int y, int somaX, int somaY, int qtd) {
+
+	if(qtd == 0) return;
+
+	int novoX = x+somaX;
+	int novoY = y+somaY;
+
+	if(!ehValida(&m, novoX, novoY)) return;
+	if(ehParede(&m, novoX, novoY)) return;
+
+	m.matriz[novoX][novoY] = VAZIO;
+	explodePilula2(novoX, novoY, somaX, somaY, qtd-1);
+}
+
+void explodePilula() {
+	if(!temPilula) return;
+	
+	explodePilula2(heroi.x, heroi.y, 0, 1, 3);
+	explodePilula2(heroi.x, heroi.y, 0, -1, 3);
+	explodePilula2(heroi.x, heroi.y, 1, 0, 3);
+	explodePilula2(heroi.x, heroi.y, -1, 0, 3);
+	
+	temPilula = 0;
 }
 
 int main() {
+	
+	leMapa(&m);
+	encontraMapa(&m, &heroi, HEROI);
 
-    leMapa(&m);
+	do {
+		printf("Píilula: %s\n", (temPilula ? "SIM" : "NAO"));
+		imprimeMapa(&m);
 
-    do {
+		char comando;
+		scanf(" %c", &comando);
 
-        imprimeMapa(&m);
+		if(ehDirecao(comando)) move(comando);
+		if(comando == BOMBA) explodePilula();
 
-        char comando;
-        scanf(" %c", &comando);
-        move(comando);
+		fantasmas();
 
-    } while (!acabou());
+	} while (!acabou());
 
-    liberaMapa(&m);
+	liberaMapa(&m);
 }
